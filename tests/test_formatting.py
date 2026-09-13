@@ -630,3 +630,47 @@ def test_command_write_usage_no_args(runner, command_kwargs, expected_usage_line
     cli = click.Command("cli", **command_kwargs)
     result = runner.invoke(cli, ["--help"])
     assert result.output.splitlines()[0] == expected_usage_line
+
+
+def test_wrap_text_break_on_hyphens():
+    """``break_on_hyphens`` controls whether a line may break after a
+    hyphen.  Default (True) preserves historical prose wrapping; False
+    keeps hyphenated tokens intact."""
+    # Two hyphenated words that together exceed the width, so the second
+    # would be split at a hyphen when break_on_hyphens is True.
+    text = "quickly --force-overwrite-existing --network-timeout-seconds"
+    kept = click.formatting.wrap_text(
+        text, width=45, initial_indent="", break_on_hyphens=False
+    )
+    # Neither hyphenated token may be split across a line break.
+    assert "--force-overwrite-existing" in kept
+    assert "--network-timeout-seconds" in kept
+    for line in kept.splitlines():
+        assert not line.rstrip().endswith("-")
+
+
+def test_write_usage_keeps_hyphenated_options_intact():
+    """End-to-end regression for #3362: ``write_usage`` must not break an
+    option name at a hyphen when it lands on the line-wrap limit."""
+    options = [
+        "--enable-verbose-logging",
+        "--output-file-path",
+        "--max-retry-count",
+        "--disable-cache-mode",
+        "--config-file-location",
+        "--user-auth-token",
+        "--auto-update-interval",
+        "--force-overwrite-existing",
+        "--network-timeout-seconds",
+        "--debug-trace-enabled",
+    ]
+    f = click.HelpFormatter(width=65)
+    f.write_usage("program", " ".join(options))
+    rendered = f.getvalue()
+
+    # Every option survives as a single token.
+    for opt in options:
+        assert opt in rendered
+    # No option is split mid-name at a hyphen onto the next line.
+    for line in rendered.splitlines():
+        assert not line.endswith("-")
